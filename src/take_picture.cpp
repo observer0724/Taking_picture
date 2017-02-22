@@ -12,7 +12,7 @@
 #include "std_msgs/Float64MultiArray.h"
 #include <vector>
 #include <iostream>
-#include<string>
+#include <string>
 #include <highgui.h>
 #include "opencv2/imgproc/imgproc.hpp"
 #include <opencv2/core/core.hpp>
@@ -79,19 +79,20 @@ int main(int argc, char **argv) {
 
 
 
-  Mat rawImage_left = cv::Mat::zeros(640, 920, CV_32FC1);
-  Mat rawImage_right = cv::Mat::zeros(640, 920, CV_32FC1);
+  Mat rawImage_left = cv::Mat::zeros(640, 920, CV_8UC3);
+  Mat rawImage_right = cv::Mat::zeros(640, 920, CV_8UC3);
+  Mat save_image = cv::Mat::zeros(640, 920, CV_8UC3);
 
 
   image_transport::ImageTransport it(nh);
-  image_transport::Subscriber img_sub_l = it.subscribe("/davinci/left_camera/image_raw", 1,
+  image_transport::Subscriber img_sub_l = it.subscribe("/davinci_endo/left/image_raw", 1,
     boost::function< void(const sensor_msgs::ImageConstPtr &)>(boost::bind(newImageCallback, _1, &rawImage_left)));
-  image_transport::Subscriber img_sub_r = it.subscribe("/davinci/right_camera/image_raw", 1,
+  image_transport::Subscriber img_sub_r = it.subscribe("/davinci_endo/right/image_raw", 1,
     boost::function< void(const sensor_msgs::ImageConstPtr &)>(boost::bind(newImageCallback, _1, &rawImage_right)));
 
     Mat seg_left;
   Mat seg_right;
-
+  // cv::cvtColor(rawImage_left, save_image, CV_XYZ2RGB);
 
 
 
@@ -105,16 +106,16 @@ int main(int argc, char **argv) {
 
 	default_position.positions[0] = -0.66709;
 	default_position.positions[1] = -0.0507692;
-	default_position.positions[2] = 0.251701;
+	default_position.positions[2] = 0.201701;
 	default_position.positions[3] = 1.25122;
 	default_position.positions[4] = -0.0885405;
 	default_position.positions[5] = 0.0329113;
 	default_position.positions[6] = 0.15338;
-	default_position.positions[7] = 0.734138;
-	default_position.positions[8] = -0.253545;
-	default_position.positions[9] = 0.200111;
+	default_position.positions[7] = 0.7;
+	default_position.positions[8] = 0.1;
+	default_position.positions[9] = 0.186111;
 	default_position.positions[10] = 0.540371;
-	default_position.positions[11] = 0.0721441;
+	default_position.positions[11] = -1;
 	default_position.positions[12] = -0.0711621;
 	default_position.positions[13] = -0.163507;
 	default_position.time_from_start = ros::Duration(5.0);
@@ -125,7 +126,7 @@ int main(int argc, char **argv) {
 
 
 
-	double wait_time_1 = 5.0;
+	double wait_time_1 = 2.0;
 	ros::Rate naptime(2.0);
 
 
@@ -155,49 +156,65 @@ int main(int argc, char **argv) {
 	//Send our message:
 	ROS_INFO("Sending trajectory with ID %u", tgoal.traj_id);
 
-	// ros::Subscriber scaler_sub= nh.subscribe("scale", 1, scalerCallback);
+	ros::Subscriber scaler_sub= nh.subscribe("scale", 1, scalerCallback);
   //ROS_INFO("%f",weight.data);
   int pic_num = 0;
   char temp[16];
-  string folder = "/home/observer0724/Desktop/pictures/";
+  string folder = "/home/dvrk/Desktop/pictures/";
   string name;
-  while (weight_data <= 14.0){
+  double pos_11 = -1;
+  for (int i=0; i<10; i++){
+		tgoal.trajectory = track;
+		
+		pos_11 += 0.2;
+		tgoal.trajectory.points[0].positions[11] = pos_11;
+		ROS_INFO_STREAM("LOOP i is: " << i);
+		ros::spinOnce();
+	    while (weight_data <= 2.5){
 
-		g_server_goal_completed= false;
-		action_client.sendGoal(tgoal,&doneCb);
+			g_server_goal_completed= false;
+			action_client.sendGoal(tgoal,&doneCb);
 
+			while(!g_server_goal_completed){
+				doneCb;
+				ros::Duration(2).sleep();
+	      		ROS_INFO("STILL MOVING");
+	      // wait_time_1 += 2.0;
+			}
+			ros::spinOnce();
+	    	ROS_INFO("Taking a picture");
+	    	ros::Duration(2).sleep();
+		    if (freshImage){
+		      sprintf(temp,"%d",pic_num);
+		      string file(temp);
+		      if (weight_data>0.1){
+		        name = folder+"touch/"+file+".png";
+		      }
+		      else{
+		        name = folder+"not_touch/"+file+".png";
+		      }
+		      imwrite(name,rawImage_left);
+		      freshImage = false;
+		      pic_num ++;
+		    }
+	    	ROS_INFO("Picture taken");
+			tgoal.trajectory.points[0].positions[9] += 0.002;
+
+			tgoal.trajectory.points[0].time_from_start = ros::Duration(wait_time_1);
+	    	tstart.trajectory.points[0].time_from_start = ros::Duration(wait_time_1+2.0);
+			tgoal.traj_id = rand();
+			// ros::Subscriber scaler_sub= nh.subscribe("scale", 1, scalerCallback);
+	    	ROS_INFO("%f",weight_data);
+		}
+  		action_client.sendGoal(tstart,&doneCb);
+  		g_server_goal_completed= false;
 		while(!g_server_goal_completed){
 			doneCb;
 			ros::Duration(2).sleep();
-      ROS_INFO("STILL MOVING");
-      // wait_time_1 += 2.0;
+		    ROS_INFO("STILL MOVING");
+		      // wait_time_1 += 2.0;
 		}
-    ROS_INFO("Taking a picture");
-    ros::Duration(5).sleep();
-    if (freshImage){
-      sprintf(temp,"%d",pic_num);
-      string file(temp);
-      if (weight_data>=6.8){
-        name = folder+"touch/"+file+".png";
-      }
-      else{
-        name = folder+"not_touch/"+file+".png";
-      }
-      imwrite(name,rawImage_left);
-      freshImage = false;
-      pic_num ++;
-    }
-    ROS_INFO("Picture taken");
-		tgoal.trajectory.points[0].positions[2] -= 0.01;
-
-		tgoal.trajectory.points[0].time_from_start = ros::Duration(wait_time_1);
-    tstart.trajectory.points[0].time_from_start = ros::Duration(wait_time_1+2.0);
-		tgoal.traj_id = rand();
-		// ros::Subscriber scaler_sub= nh.subscribe("scale", 1, scalerCallback);
-    ROS_INFO("%f",weight_data);
-    ros::spinOnce();
 	}
-  action_client.sendGoal(tstart,&doneCb);
 	//Wait for it to finish.
 	while(!action_client.waitForResult(ros::Duration(wait_time_1 + 4.0)) && ros::ok()){
 	  ROS_WARN("CLIENT TIMED OUT- LET'S TRY AGAIN...");
