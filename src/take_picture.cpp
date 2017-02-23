@@ -40,7 +40,7 @@ void doneCb(const actionlib::SimpleClientGoalState& state,
     g_server_goal_completed = true;
 }
 
-double weight_data = 9.0;
+double weight_data = 0.0;
 
 void scalerCallback(const std_msgs::Float64& weight)
 {
@@ -79,20 +79,19 @@ int main(int argc, char **argv) {
 
 
 
-  Mat rawImage_left = cv::Mat::zeros(640, 920, CV_8UC3);
-  Mat rawImage_right = cv::Mat::zeros(640, 920, CV_8UC3);
-  Mat save_image = cv::Mat::zeros(640, 920, CV_8UC3);
+	Mat rawImage_left = cv::Mat::zeros(640, 920, CV_8UC3);
+	Mat rawImage_right = cv::Mat::zeros(640, 920, CV_8UC3);
+	Mat save_image = cv::Mat::zeros(640, 920, CV_8UC3);
 
 
-  image_transport::ImageTransport it(nh);
-  image_transport::Subscriber img_sub_l = it.subscribe("/davinci_endo/left/image_raw", 1,
-    boost::function< void(const sensor_msgs::ImageConstPtr &)>(boost::bind(newImageCallback, _1, &rawImage_left)));
-  image_transport::Subscriber img_sub_r = it.subscribe("/davinci_endo/right/image_raw", 1,
-    boost::function< void(const sensor_msgs::ImageConstPtr &)>(boost::bind(newImageCallback, _1, &rawImage_right)));
+	image_transport::ImageTransport it(nh);
+	image_transport::Subscriber img_sub_l = it.subscribe("/davinci_endo/left/image_raw", 1,
+	  boost::function< void(const sensor_msgs::ImageConstPtr &)>(boost::bind(newImageCallback, _1, &rawImage_left)));
+	image_transport::Subscriber img_sub_r = it.subscribe("/davinci_endo/right/image_raw", 1,
+	  boost::function< void(const sensor_msgs::ImageConstPtr &)>(boost::bind(newImageCallback, _1, &rawImage_right)));
 
-    Mat seg_left;
-  Mat seg_right;
-  // cv::cvtColor(rawImage_left, save_image, CV_XYZ2RGB);
+	Mat seg_left;
+	Mat seg_right;
 
 
 
@@ -113,7 +112,7 @@ int main(int argc, char **argv) {
 	default_position.positions[6] = 0.15338;
 	default_position.positions[7] = 0.7;
 	default_position.positions[8] = 0.1;
-	default_position.positions[9] = 0.186111;
+	default_position.positions[9] = 0.160;
 	default_position.positions[10] = 0.540371;
 	default_position.positions[11] = -1;
 	default_position.positions[12] = -0.0711621;
@@ -160,26 +159,25 @@ int main(int argc, char **argv) {
   //ROS_INFO("%f",weight.data);
   int pic_num = 0;
   char temp[16];
-  string folder = "/home/dvrk/Desktop/pictures/";
+  string folder = "/home/dvrk/Desktop/yida_pictures/";
   string name;
   double pos_11 = -1;
+
+  Mat raw_copy_left;
+  Mat raw_copy_right;
   for (int i=0; i<10; i++){
 		tgoal.trajectory = track;
-		
 		pos_11 += 0.2;
 		tgoal.trajectory.points[0].positions[11] = pos_11;
 		ROS_INFO_STREAM("LOOP i is: " << i);
 		ros::spinOnce();
 	    while (weight_data <= 2.5){
-
 			g_server_goal_completed= false;
 			action_client.sendGoal(tgoal,&doneCb);
-
 			while(!g_server_goal_completed){
 				doneCb;
 				ros::Duration(2).sleep();
 	      		ROS_INFO("STILL MOVING");
-	      // wait_time_1 += 2.0;
 			}
 			ros::spinOnce();
 	    	ROS_INFO("Taking a picture");
@@ -193,27 +191,35 @@ int main(int argc, char **argv) {
 		      else{
 		        name = folder+"not_touch/"+file+".png";
 		      }
-		      imwrite(name,rawImage_left);
+		      raw_copy_left = rawImage_right.clone();
+		      for (int k = 0; k < raw_copy_left.rows; ++k)
+		      {
+		      	for (int j = 0; j < raw_copy_left.cols; ++j)
+		      	{
+		      		raw_copy_left.at<cv::Vec3b>(k,j)[0] = rawImage_right.at<cv::Vec3b>(k,j)[2];
+		      		raw_copy_left.at<cv::Vec3b>(k,j)[2] = rawImage_right.at<cv::Vec3b>(k,j)[0];
+		      	}
+		      }
+		      imwrite(name,raw_copy_left);
 		      freshImage = false;
+		      ROS_INFO_STREAM("LOOP i is: " << i);
+		      ROS_INFO_STREAM("pic is: " << pic_num);
 		      pic_num ++;
 		    }
 	    	ROS_INFO("Picture taken");
-			tgoal.trajectory.points[0].positions[9] += 0.002;
-
+			tgoal.trajectory.points[0].positions[9] += 0.003;
 			tgoal.trajectory.points[0].time_from_start = ros::Duration(wait_time_1);
 	    	tstart.trajectory.points[0].time_from_start = ros::Duration(wait_time_1+2.0);
 			tgoal.traj_id = rand();
-			// ros::Subscriber scaler_sub= nh.subscribe("scale", 1, scalerCallback);
 	    	ROS_INFO("%f",weight_data);
+
 		}
   		action_client.sendGoal(tstart,&doneCb);
   		g_server_goal_completed= false;
 		while(!g_server_goal_completed){
 			doneCb;
 			ros::Duration(2).sleep();
-		    ROS_INFO("STILL MOVING");
-		      // wait_time_1 += 2.0;
-		}
+		    ROS_INFO("STILL MOVING");		}
 	}
 	//Wait for it to finish.
 	while(!action_client.waitForResult(ros::Duration(wait_time_1 + 4.0)) && ros::ok()){
